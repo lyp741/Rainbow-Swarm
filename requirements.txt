@@ -1,0 +1,6 @@
+tornado
+msgpack
+pillow
+torch
+torchvision
+
