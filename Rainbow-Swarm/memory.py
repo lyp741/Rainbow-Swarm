@@ -5,13 +5,16 @@ import numpy as np
 
 Transition = namedtuple(
     'Transition', ('timestep', 'state', 'action', 'reward', 'nonterminal'))
-blank_trans = Transition(0, {'cnn':torch.zeros(
-    9,3,128,128, dtype=torch.float32),'oth':torch.zeros(9,11,dtype=torch.float32)}, torch.zeros(9,dtype=torch.int64), torch.zeros(9,dtype=torch.float32), False)
-
+blank_trans = []
 
 # Segment tree data structure where parent node values are sum/max of children node values
 class SegmentTree():
-    def __init__(self, size):
+    def __init__(self, size,agent_count):
+        global Transition, blank_trans
+        Transition = namedtuple('Transition', ('timestep', 'state', 'action', 'reward', 'nonterminal'))
+        blank_trans = Transition(0, {'cnn':torch.zeros(agent_count,3,128,128, dtype=torch.float32),'oth':torch.zeros(agent_count,11,dtype=torch.float32)}, torch.zeros(9,dtype=torch.int64), torch.zeros(9,dtype=torch.float32), False)
+
+
         self.index = 0
         self.size = size
         self.full = False  # Used to track actual capacity
@@ -67,7 +70,7 @@ class SegmentTree():
 
 
 class ReplayMemory():
-    def __init__(self, args, capacity):
+    def __init__(self, args, capacity,agent_count):
         self.device = args.device
         self.capacity = capacity
         self.history = args.history_length
@@ -78,7 +81,7 @@ class ReplayMemory():
         self.priority_exponent = args.priority_exponent
         self.t = 0  # Internal episode timestep counter
         # Store transitions in a wrap-around cyclic buffer within a sum tree for querying priorities
-        self.transitions = SegmentTree(capacity)
+        self.transitions = SegmentTree(capacity,agent_count)
 
     # Adds state and action at time t, reward and terminal at time t + 1
     def append(self, state, action, reward, terminal):

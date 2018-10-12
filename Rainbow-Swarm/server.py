@@ -29,7 +29,7 @@ parser.add_argument('--gpu', '-g', default=-1, type=int,
                     help='GPU ID (negative value indicates CPU)')
 parser.add_argument('--log-file', '-l', default='../../log/model_test/', type=str,
                     help='reward log file name')
-parser.add_argument('--agent-count', '-c', default=1, type=int,
+parser.add_argument('--agent-count', '-c', default=9, type=int,
                     help='number of agent')
 parser.add_argument('--mode-distribute', '-d', default=False, type=bool,
                     help='mode distribute')
@@ -49,7 +49,7 @@ parser.add_argument('--history-length', type=int, default=4,
                     metavar='T', help='Number of consecutive states processed')
 parser.add_argument('--hidden-size', type=int, default=64,
                     metavar='SIZE', help='Network hidden size')
-parser.add_argument('--noisy-std', type=float, default=0.1, metavar='σ',
+parser.add_argument('--noisy-std', type=float, default=0.5, metavar='σ',
                     help='Initial standard deviation of noisy linear layers')
 parser.add_argument('--atoms', type=int, default=51, metavar='C',
                     help='Discretised size of value distribution')
@@ -59,7 +59,7 @@ parser.add_argument('--V-max', type=float, default=10,
                     metavar='V', help='Maximum of value distribution support')
 parser.add_argument('--model', type=str, metavar='PARAMS',
                     help='Pretrained model (state dict)')
-parser.add_argument('--memory-capacity', type=int, default=int(1e6),
+parser.add_argument('--memory-capacity', type=int, default=int(8000),
                     metavar='CAPACITY', help='Experience replay memory capacity')
 parser.add_argument('--replay-frequency', type=int, default=4,
                     metavar='k', help='Frequency of sampling from memory')
@@ -75,7 +75,7 @@ parser.add_argument('--target-update', type=int, default=int(100),
                     metavar='τ', help='Number of steps after which to update target network')
 parser.add_argument('--reward-clip', type=int, default=1,
                     metavar='VALUE', help='Reward clipping (0 to disable)')
-parser.add_argument('--lr', type=float, default=0.0000625,
+parser.add_argument('--lr', type=float, default=0.0001,
                     metavar='η', help='Learning rate')
 parser.add_argument('--adam-eps', type=float, default=1.5e-4,
                     metavar='ε', help='Adam epsilon')
@@ -98,7 +98,7 @@ parser.add_argument('--render', action='store_true',
 args = parser.parse_args()
 args.device = torch.device('cpu')
 
-
+agent_count = args.agent_count
 class IndexHandler(tornado.web.RequestHandler):
     def get(self):
         greeting = self.get_argument('greeting', 'Hello')
@@ -109,7 +109,7 @@ class IndexHandler(tornado.web.RequestHandler):
 class StatusHandler(tornado.websocket.WebSocketHandler):
 
     agent = Agent(args)
-    mem = ReplayMemory(args, args.memory_capacity)
+    mem = ReplayMemory(args, args.memory_capacity,agent_count)
     agent_initialized = False
     cycle_counter = 1
     rgb_image_count = 1
@@ -125,8 +125,9 @@ class StatusHandler(tornado.websocket.WebSocketHandler):
     if args.mode_distribute:
         thread_event = threading.Event()
 
-    state_cnn = torch.zeros(4,9,3,128,128)
-    state_oth = torch.zeros(4,9,11)
+    state_cnn = torch.zeros(4,agent_count,3,128,128)
+    state_oth = torch.zeros(4,agent_count,11)
+    T = 0
     def open(self):
         print("open")
 
@@ -210,11 +211,14 @@ class StatusHandler(tornado.websocket.WebSocketHandler):
         
         # for i in range(1000):
         self.mem.append({'cnn':s_cnn,'oth':s_oth},action,reward,end_episode)
-        self.agent.learn(self.mem)
-        if self.mem.t % args.replay_frequency == 0:
-            self.agent.reset_noise()  # Draw a new set of noisy weights
+        if self.T > 1000:
+            self.agent.learn(self.mem,self.T)
+        self.T += 1
+        if self.T % args.replay_frequency == 0:
+            # self.agent.reset_noise()  # Draw a new set of noisy weights
+            pass
         # Update target network
-        if self.mem.t % args.target_update == 0:
+        if self.T % args.target_update == 0:
             self.agent.update_target_net()
 
 

@@ -5,9 +5,12 @@ from torch import optim
 
 from model import DQN
 import numpy as np
+from visdom import Visdom
 
 class Agent():
     def __init__(self, args):
+        self.vis = Visdom()
+        self.win = self.vis.line(X=np.array([0]),Y=np.array([0]))
         self.args = args
         self.action_space = 8
         self.atoms = args.atoms
@@ -73,9 +76,7 @@ class Agent():
     def act_e_greedy(self, state, epsilon=0.001):
         return random.randrange(self.action_space) if random.random() < epsilon else self.act(state)
 
-    def learn(self, mem):
-        if mem.transitions.index < 1000: #self.args.learn_start:
-            return
+    def learn(self, mem, step):
         
         # Sample transitions
         idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(self.batch_size)
@@ -125,11 +126,14 @@ class Agent():
 
         # Cross-entropy loss (minimises DKL(m||p(s_t, a_t)))
         loss = -torch.sum(m * log_ps_a, 1)
+        
         self.online_net.zero_grad()
         # Backpropagate importance-weighted minibatch loss
         (weights * loss).mean().backward()
         self.optimiser.step()
-
+        loss_sum = loss.sum()
+        loss_sum = loss_sum.detach().numpy()
+        self.vis.line(X = np.array([step]),Y=np.array([loss_sum]),update='append',win=self.win)
         # Update priorities of sampled transitions
         mem.update_priorities(idxs, loss.detach())
 
